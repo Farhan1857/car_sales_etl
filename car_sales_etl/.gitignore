@@ -1,0 +1,44 @@
+# .gitignore — Car Sales ETL Pipeline
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+*.env
+
+# Data files — do not commit raw or processed data
+data/raw/*.csv
+data/processed/*.csv
+
+# Logs
+pipeline.log
+*.log
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Tableau workbook (binary — track separately if needed)
+*.twb
+*.twbx
