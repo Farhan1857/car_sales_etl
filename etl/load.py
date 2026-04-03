@@ -48,20 +48,12 @@ def _verify_connection(engine) -> bool:
 
 
 def load_fact_table(df: pd.DataFrame, engine) -> int:
-    """
-    Chunk-insert cleaned records into the car_sales fact table.
-
-    Uses 'append' mode — the schema.sql DDL creates the table first.
-    Duplicates are handled by the UNIQUE constraint on (vin, saledate).
-
-    Returns
-    -------
-    int : Total rows successfully inserted.
-    """
-    # Select only the columns that map to the DB schema
+    # Rename condition to match DB schema column name
+    df = df.rename(columns={"condition": "condition_score"})
+    
     fact_cols = [
         "vin", "year", "make", "model", "trim", "body", "transmission",
-        "state", "condition", "odometer", "color", "interior", "seller",
+        "state", "condition_score", "odometer", "color", "interior", "seller",
         "mmr", "sellingprice", "saledate",
         "price_margin", "margin_pct", "sale_year", "sale_month",
         "sale_month_name", "sale_day_of_week", "sale_quarter",
@@ -92,7 +84,7 @@ def load_fact_table(df: pd.DataFrame, engine) -> int:
             if_exists="append",
             index=False,
             method="multi",          # Batch VALUES inserts (faster than row-by-row)
-            chunksize=500,
+            chunksize=200,
         )
         inserted += len(chunk)
         progress = (inserted / total_rows) * 100
