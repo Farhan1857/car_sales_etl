@@ -9,7 +9,7 @@ USE car_sales_db;
 -- ── View 1: Monthly Revenue & Volume Trend ─────────────────────
 CREATE OR REPLACE VIEW vw_monthly_trend AS
 SELECT
-    CONCAT(sale_year, '-', LPAD(sale_month, 2, '0'))  AS year_month,
+    CONCAT(sale_year, '-', LPAD(sale_month, 2, '0'))  AS 'year_month',
     sale_year,
     sale_month,
     sale_month_name,

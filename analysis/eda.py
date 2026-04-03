@@ -2,12 +2,15 @@
 # ─────────────────────────────────────────────────────────────
 # Exploratory Data Analysis — Car Dealership Sales
 #
-# This script mirrors the analysis performed in eda.ipynb.
-# Run it standalone or use `jupytext` to convert to .ipynb.
-#
 #   python analysis/eda.py
 #
 # Outputs figures to analysis/figures/
+# Questions addressed:
+#   Q1. Which make has the highest and lowest avg selling price?
+#   Q2. Does color influence price?
+#   Q3. What is the relation between condition and body type?
+#   Q4. Does body type affect price?
+#   Q5. Does make affect condition score?
 # ─────────────────────────────────────────────────────────────
 
 import pandas as pd
@@ -30,7 +33,6 @@ plt.rcParams.update({"figure.dpi": 120, "axes.titlesize": 13})
 
 
 def load_data() -> pd.DataFrame:
-    """Load the cleaned CSV produced by the Transform step."""
     if not CLEANED_CSV.exists():
         raise FileNotFoundError(
             f"Cleaned CSV not found at {CLEANED_CSV}. "
@@ -38,7 +40,6 @@ def load_data() -> pd.DataFrame:
         )
     df = pd.read_csv(CLEANED_CSV, parse_dates=["saledate"], low_memory=False)
     print(f"Loaded {len(df):,} records")
-    print(df.dtypes)
     return df
 
 
@@ -66,28 +67,7 @@ def plot_price_distribution(df: pd.DataFrame) -> None:
     print("Saved: 01_price_distribution.png")
 
 
-# ── Figure 2: Top Makes by Volume ─────────────────────────────
-def plot_top_makes(df: pd.DataFrame) -> None:
-    top_makes = (
-        df.groupby("make")["sellingprice"]
-        .agg(["count", "mean"])
-        .rename(columns={"count": "units", "mean": "avg_price"})
-        .nlargest(15, "units")
-        .reset_index()
-    )
-
-    fig, ax = plt.subplots(figsize=(12, 6))
-    bars = ax.barh(top_makes["make"][::-1], top_makes["units"][::-1], color="#4C72B0")
-    ax.set_xlabel("Units Sold")
-    ax.set_title("Top 15 Makes by Sales Volume", fontweight="bold")
-    ax.bar_label(bars, fmt="{:,.0f}", padding=4)
-    plt.tight_layout()
-    fig.savefig(FIGURES_DIR / "02_top_makes_volume.png")
-    plt.close()
-    print("Saved: 02_top_makes_volume.png")
-
-
-# ── Figure 3: Monthly Sales Trend ─────────────────────────────
+# ── Figure 2: Monthly Sales Trend ─────────────────────────────
 def plot_monthly_trend(df: pd.DataFrame) -> None:
     monthly = (
         df.groupby(["sale_year", "sale_month"])
@@ -120,88 +100,268 @@ def plot_monthly_trend(df: pd.DataFrame) -> None:
     fig.legend(loc="upper left", bbox_to_anchor=(0.1, 0.9))
     fig.autofmt_xdate()
     plt.tight_layout()
-    fig.savefig(FIGURES_DIR / "03_monthly_trend.png")
+    fig.savefig(FIGURES_DIR / "02_monthly_trend.png")
     plt.close()
-    print("Saved: 03_monthly_trend.png")
+    print("Saved: 02_monthly_trend.png")
 
 
-# ── Figure 4: Avg Margin by Make (Top 10) ─────────────────────
-def plot_margin_by_make(df: pd.DataFrame) -> None:
-    margin = (
+# ── Figure 3: Q1 — Highest & Lowest Avg Price by Make ─────────
+def plot_make_price_highlow(df: pd.DataFrame) -> None:
+    make_price = (
         df[df["make"].notna()]
         .groupby("make")
-        .agg(avg_margin=("price_margin", "mean"), units=("sellingprice", "count"))
+        .agg(avg_price=("sellingprice", "mean"), units=("sellingprice", "count"))
         .query("units >= 100")
-        .nlargest(10, "avg_margin")
         .reset_index()
+        .sort_values("avg_price")
     )
 
-    colors = ["#2ecc71" if m > 0 else "#e74c3c" for m in margin["avg_margin"]]
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(margin["make"], margin["avg_margin"], color=colors, edgecolor="white")
-    ax.axhline(0, color="black", linewidth=0.8)
-    ax.set_title("Top 10 Makes by Avg Price Margin over MMR", fontweight="bold")
-    ax.set_xlabel("Make")
-    ax.set_ylabel("Avg Margin ($)")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-    plt.xticks(rotation=30, ha="right")
-    plt.tight_layout()
-    fig.savefig(FIGURES_DIR / "04_margin_by_make.png")
-    plt.close()
-    print("Saved: 04_margin_by_make.png")
+    top10    = make_price.nlargest(10, "avg_price")
+    bottom10 = make_price.nsmallest(10, "avg_price")
+    combined = pd.concat([bottom10, top10]).reset_index(drop=True)
+    colors   = ["#e74c3c"] * 10 + ["#2ecc71"] * 10
 
-
-# ── Figure 5: Body Style Breakdown ────────────────────────────
-def plot_body_breakdown(df: pd.DataFrame) -> None:
-    body = (
-        df[df["body"].notna()]
-        .groupby("body")
-        .agg(units=("sellingprice", "count"), avg_price=("sellingprice", "mean"))
-        .nlargest(8, "units")
-        .reset_index()
+    fig, ax = plt.subplots(figsize=(12, 8))
+    bars = ax.barh(combined["make"], combined["avg_price"], color=colors, edgecolor="white")
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    ax.set_xlabel("Avg Selling Price ($)")
+    ax.set_title(
+        "Q1: Highest vs Lowest Avg Selling Price by Make\n"
+        "(Top 10 = green  |  Bottom 10 = red  |  min. 100 units sold)",
+        fontweight="bold"
     )
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-    axes[0].pie(body["units"], labels=body["body"], autopct="%1.1f%%",
-                startangle=90, colors=sns.color_palette("muted", len(body)))
-    axes[0].set_title("Volume by Body Style", fontweight="bold")
-
-    axes[1].bar(body["body"], body["avg_price"], color=sns.color_palette("muted", len(body)))
-    axes[1].set_title("Avg Selling Price by Body Style", fontweight="bold")
-    axes[1].set_ylabel("Avg Price ($)")
-    axes[1].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-    plt.xticks(rotation=30, ha="right")
-
-    plt.tight_layout()
-    fig.savefig(FIGURES_DIR / "05_body_breakdown.png")
-    plt.close()
-    print("Saved: 05_body_breakdown.png")
-
-
-# ── Figure 6: Condition Score vs. Price ───────────────────────
-def plot_condition_vs_price(df: pd.DataFrame) -> None:
-    cond = (
-        df[df["condition_score"].notna()]
-        .assign(cond_bucket=lambda d: d["condition_score"].round(0))
-        .groupby("cond_bucket")
-        .agg(avg_price=("sellingprice", "mean"), avg_margin=("price_margin", "mean"),
-             units=("sellingprice", "count"))
-        .reset_index()
-    )
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(cond["cond_bucket"], cond["avg_price"], marker="o", linewidth=2,
-            color="#4C72B0", label="Avg Selling Price")
-    ax.set_xlabel("Condition Score (1–5)")
-    ax.set_ylabel("Avg Selling Price ($)")
-    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-    ax.set_title("Vehicle Condition Score vs. Average Selling Price", fontweight="bold")
+    ax.axvline(make_price["avg_price"].mean(), color="black", linewidth=1,
+               linestyle="--", label=f"Overall Avg: ${make_price['avg_price'].mean():,.0f}")
     ax.legend()
+    ax.bar_label(bars, fmt="$%.0f", padding=4, fontsize=8)
     plt.tight_layout()
-    fig.savefig(FIGURES_DIR / "06_condition_vs_price.png")
+    fig.savefig(FIGURES_DIR / "03_make_price_highlow.png")
     plt.close()
-    print("Saved: 06_condition_vs_price.png")
+    print("Saved: 03_make_price_highlow.png")
+
+
+# ── Figure 4: Q2 — Does Color Influence Price? ────────────────
+def plot_color_vs_price(df: pd.DataFrame) -> None:
+    df = df.copy()
+    df["color"] = df["color"].str.strip().str.title()
+
+    color_price = (
+        df[df["color"].notna() & ~df["color"].isin(["—", "Nan", "nan"])]
+        .groupby("color")
+        .agg(avg_price=("sellingprice", "mean"), units=("sellingprice", "count"))
+        .query("units >= 500")
+        .reset_index()
+        .sort_values("avg_price", ascending=False)
+    )
+
+    overall_avg = df["sellingprice"].mean()
+    color_price["diff_from_avg"] = color_price["avg_price"] - overall_avg
+    bar_colors = ["#2ecc71" if d >= 0 else "#e74c3c" for d in color_price["diff_from_avg"]]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    axes[0].barh(
+        color_price["color"][::-1],
+        color_price["avg_price"][::-1],
+        color=bar_colors[::-1],
+        edgecolor="white"
+    )
+    axes[0].axvline(overall_avg, color="black", linewidth=1.2, linestyle="--",
+                    label=f"Overall Avg: ${overall_avg:,.0f}")
+    axes[0].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    axes[0].set_title("Avg Selling Price by Color\n(green = above avg, red = below avg)", fontweight="bold")
+    axes[0].set_xlabel("Avg Selling Price ($)")
+    axes[0].legend(fontsize=9)
+
+    axes[1].barh(
+        color_price["color"][::-1],
+        color_price["units"][::-1],
+        color="#4C72B0",
+        edgecolor="white"
+    )
+    axes[1].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+    axes[1].set_title("Units Sold by Color", fontweight="bold")
+    axes[1].set_xlabel("Units Sold")
+
+    fig.suptitle(
+        "Q2: Does Vehicle Color Influence Price?  (Colors with ≥500 units sold)",
+        fontsize=14, fontweight="bold"
+    )
+    plt.tight_layout()
+    fig.savefig(FIGURES_DIR / "04_color_vs_price.png")
+    plt.close()
+    print("Saved: 04_color_vs_price.png")
+
+
+# ── Figure 5: Q3 — Condition vs Body Type ─────────────────────
+def plot_condition_by_body(df: pd.DataFrame) -> None:
+    top_bodies = (
+        df[df["body"].notna()]
+        .groupby("body")["condition"]
+        .count()
+        .nlargest(8)
+        .index.tolist()
+    )
+
+    plot_df = df[df["body"].isin(top_bodies)].copy()
+    order = (
+        plot_df.groupby("body")["condition"]
+        .median()
+        .sort_values(ascending=False)
+        .index.tolist()
+    )
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+    sns.boxplot(
+        data=plot_df,
+        x="body",
+        y="condition",
+        order=order,
+        palette="muted",
+        ax=ax,
+        flierprops={"marker": ".", "markersize": 2, "alpha": 0.3}
+    )
+    ax.set_title(
+        "Q3: Condition Score Distribution by Body Type\n"
+        "(Higher score = better condition  |  Box = IQR  |  Line = median)",
+        fontweight="bold"
+    )
+    ax.set_xlabel("Body Type")
+    ax.set_ylabel("Condition Score")
+    plt.xticks(rotation=25, ha="right")
+    plt.tight_layout()
+    fig.savefig(FIGURES_DIR / "05_condition_by_body.png")
+    plt.close()
+    print("Saved: 05_condition_by_body.png")
+
+
+# ── Figure 6: Q4 — Does Body Type Affect Price? ───────────────
+def plot_body_vs_price(df: pd.DataFrame) -> None:
+    top_bodies = (
+        df[df["body"].notna()]
+        .groupby("body")["sellingprice"]
+        .count()
+        .nlargest(8)
+        .index.tolist()
+    )
+
+    body_stats = (
+        df[df["body"].isin(top_bodies)]
+        .groupby("body")["sellingprice"]
+        .mean()
+        .reset_index()
+        .rename(columns={"sellingprice": "avg"})
+        .sort_values("avg", ascending=False)
+    )
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    palette = sns.color_palette("muted", len(body_stats))
+    bars = axes[0].bar(
+        body_stats["body"], body_stats["avg"],
+        color=palette, edgecolor="white"
+    )
+    axes[0].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    axes[0].set_title("Avg Selling Price by Body Type", fontweight="bold")
+    axes[0].set_ylabel("Avg Selling Price ($)")
+    axes[0].bar_label(bars, fmt="$%.0f", padding=4, fontsize=8)
+    plt.setp(axes[0].get_xticklabels(), rotation=25, ha="right")
+
+    plot_df = df[df["body"].isin(top_bodies)].copy()
+    order = body_stats["body"].tolist()
+    sns.violinplot(
+        data=plot_df,
+        x="body",
+        y="sellingprice",
+        order=order,
+        palette="muted",
+        ax=axes[1],
+        inner="quartile",
+        cut=0
+    )
+    axes[1].yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:,.0f}"))
+    axes[1].set_title("Price Distribution by Body Type", fontweight="bold")
+    axes[1].set_ylabel("Selling Price ($)")
+    axes[1].set_xlabel("Body Type")
+    plt.setp(axes[1].get_xticklabels(), rotation=25, ha="right")
+
+    fig.suptitle("Q4: Does Body Type Affect Selling Price?", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    fig.savefig(FIGURES_DIR / "06_body_vs_price.png")
+    plt.close()
+    print("Saved: 06_body_vs_price.png")
+
+
+# ── Figure 7: Q5 — Does Make Affect Condition Score? ──────────
+def plot_make_vs_condition(df: pd.DataFrame) -> None:
+    top_makes = (
+        df[df["make"].notna() & df["condition"].notna()]
+        .groupby("make")["condition"]
+        .count()
+        .nlargest(15)
+        .index.tolist()
+    )
+
+    make_cond = (
+        df[df["make"].isin(top_makes)]
+        .groupby("make")["condition"]
+        .agg(avg="mean", std="std")
+        .reset_index()
+        .sort_values("avg", ascending=False)
+    )
+
+    overall_avg = df["condition"].mean()
+    bar_colors = ["#2ecc71" if v >= overall_avg else "#e74c3c" for v in make_cond["avg"]]
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+
+    axes[0].barh(
+        make_cond["make"][::-1],
+        make_cond["avg"][::-1],
+        xerr=make_cond["std"][::-1],
+        color=bar_colors[::-1],
+        edgecolor="white",
+        capsize=3,
+        error_kw={"elinewidth": 1, "ecolor": "gray"}
+    )
+    axes[0].axvline(overall_avg, color="black", linewidth=1.2, linestyle="--",
+                    label=f"Overall Avg: {overall_avg:.1f}")
+    axes[0].set_title("Avg Condition Score by Make\n(error bars = std dev)", fontweight="bold")
+    axes[0].set_xlabel("Avg Condition Score")
+    axes[0].legend(fontsize=9)
+
+    plot_df = df[df["make"].isin(top_makes) & df["condition"].notna()].copy()
+    plot_df["cond_bucket"] = pd.cut(
+        plot_df["condition"],
+        bins=[0, 10, 20, 30, 40, 50],
+        labels=["0-10", "10-20", "20-30", "30-40", "40-50"]
+    )
+    heat = (
+        plot_df.groupby(["make", "cond_bucket"], observed=True)
+        .size()
+        .unstack(fill_value=0)
+    )
+    heat_pct = heat.div(heat.sum(axis=1), axis=0) * 100
+    heat_pct = heat_pct.loc[make_cond["make"].tolist()]
+
+    sns.heatmap(
+        heat_pct,
+        ax=axes[1],
+        cmap="YlOrRd",
+        annot=True,
+        fmt=".0f",
+        linewidths=0.5,
+        cbar_kws={"label": "% of Make's Inventory"}
+    )
+    axes[1].set_title("Condition Score Distribution by Make (%)", fontweight="bold")
+    axes[1].set_xlabel("Condition Score Range")
+    axes[1].set_ylabel("Make")
+
+    fig.suptitle("Q5: Does Vehicle Make Affect Condition Score?", fontsize=14, fontweight="bold")
+    plt.tight_layout()
+    fig.savefig(FIGURES_DIR / "07_make_vs_condition.png")
+    plt.close()
+    print("Saved: 07_make_vs_condition.png")
 
 
 # ── Main ───────────────────────────────────────────────────────
@@ -213,10 +373,11 @@ if __name__ == "__main__":
 
     print("\nGenerating figures...")
     plot_price_distribution(df)
-    plot_top_makes(df)
     plot_monthly_trend(df)
-    plot_margin_by_make(df)
-    plot_body_breakdown(df)
-    plot_condition_vs_price(df)
+    plot_make_price_highlow(df)
+    plot_color_vs_price(df)
+    plot_condition_by_body(df)
+    plot_body_vs_price(df)
+    plot_make_vs_condition(df)
 
     print(f"\nAll figures saved to: {FIGURES_DIR}/")
